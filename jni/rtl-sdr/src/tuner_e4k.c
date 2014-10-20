@@ -29,7 +29,6 @@
 
 #include <reg_field.h>
 #include <tuner_e4k.h>
-#include <rtlsdr_i2c.h>
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
@@ -56,19 +55,17 @@ static const uint8_t width2mask[] = {
 /***********************************************************************
  * Register Access */
 
+#if 0
 /*! \brief Write a register of the tuner chip
  *  \param[in] e4k reference to the tuner
  *  \param[in] reg number of the register
  *  \param[in] val value to be written
  *  \returns 0 on success, negative in case of error
  */
-static int e4k_reg_write(struct e4k_state *e4k, uint8_t reg, uint8_t val)
+int e4k_reg_write(struct e4k_state *e4k, uint8_t reg, uint8_t val)
 {
-	uint8_t data[2];
-	data[0] = reg;
-	data[1] = val;
-
-	return rtlsdr_i2c_write_fn(e4k->rtl_dev, e4k->i2c_addr, data, 2);
+	/* FIXME */
+	return 0;
 }
 
 /*! \brief Read a register of the tuner chip
@@ -76,18 +73,12 @@ static int e4k_reg_write(struct e4k_state *e4k, uint8_t reg, uint8_t val)
  *  \param[in] reg number of the register
  *  \returns positive 8bit register contents on success, negative in case of error
  */
-static int e4k_reg_read(struct e4k_state *e4k, uint8_t reg)
+int e4k_reg_read(struct e4k_state *e4k, uint8_t reg)
 {
-	uint8_t data = reg;
-
-	if (rtlsdr_i2c_write_fn(e4k->rtl_dev, e4k->i2c_addr, &data, 1) < 1)
-		return -1;
-
-	if (rtlsdr_i2c_read_fn(e4k->rtl_dev, e4k->i2c_addr, &data, 1) < 1)
-		return -1;
-
-	return data;
+	/* FIXME */
+	return 0;
 }
+#endif
 
 /*! \brief Set or clear some (masked) bits inside a register
  *  \param[in] e4k reference to the tuner
@@ -532,6 +523,8 @@ uint32_t e4k_compute_pll_params(struct e4k_pll_params *oscp, uint32_t fosc, uint
 
 int e4k_tune_params(struct e4k_state *e4k, struct e4k_pll_params *p)
 {
+	uint8_t val;
+
 	/* program R + 3phase/2phase */
 	e4k_reg_write(e4k, E4K_REG_SYNTH7, p->r_idx);
 	/* program Z */
@@ -883,19 +876,6 @@ int e4k_dc_offset_gen_table(struct e4k_state *e4k)
 		e4k_reg_write(e4k, dc_gain_comb[i].reg + 0x10,
 			      TO_LUT(offs_i, range_i));
 	}
-
-	return 0;
-}
-
-/***********************************************************************
- * Standby */
-
-/*! \brief Enable/disable standby mode
- */
-int e4k_standby(struct e4k_state *e4k, int enable)
-{
-	e4k_reg_set_mask(e4k, E4K_REG_MASTER1, E4K_MASTER1_NORM_STBY,
-			 enable ? 0 : E4K_MASTER1_NORM_STBY);
 
 	return 0;
 }

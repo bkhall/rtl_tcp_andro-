@@ -25,16 +25,16 @@
 #ifndef _WIN32
 #include <unistd.h>
 #else
-#include <windows.h>
+#include <Windows.h>
 #include <io.h>
 #include <fcntl.h>
 #include "getopt/getopt.h"
 #endif
 
 #include "rtl-sdr.h"
-#include "convenience/convenience.h"
 
 #define DEFAULT_SAMPLE_RATE		2048000
+#define DEFAULT_ASYNC_BUF_NUMBER	32
 #define DEFAULT_BUF_LENGTH		(16 * 16384)
 #define MINIMAL_BUF_LENGTH		512
 #define MAXIMAL_BUF_LENGTH		(256 * 16384)
@@ -51,7 +51,6 @@ void usage(void)
 		"\t[-s samplerate (default: 2048000 Hz)]\n"
 		"\t[-d device_index (default: 0)]\n"
 		"\t[-g gain (default: 0 for auto)]\n"
-		"\t[-p ppm_error (default: 0)]\n"
 		"\t[-b output_block_size (default: 16 * 16384)]\n"
 		"\t[-n number of samples to read (default: 0, infinite)]\n"
 		"\t[-S force sync output (default: async)]\n"
@@ -110,34 +109,30 @@ int main(int argc, char **argv)
 	char *filename = NULL;
 	int n_read;
 	int r, opt;
-	int gain = 0;
-	int ppm_error = 0;
+	int i, gain = 0;
 	int sync_mode = 0;
 	FILE *file;
 	uint8_t *buffer;
-	int dev_index = 0;
-	int dev_given = 0;
+	uint32_t dev_index = 0;
 	uint32_t frequency = 100000000;
 	uint32_t samp_rate = DEFAULT_SAMPLE_RATE;
 	uint32_t out_block_size = DEFAULT_BUF_LENGTH;
+	int device_count;
+	char vendor[256], product[256], serial[256];
 
-	while ((opt = getopt(argc, argv, "d:f:g:s:b:n:p:S")) != -1) {
+	while ((opt = getopt(argc, argv, "d:f:g:s:b:n:S::")) != -1) {
 		switch (opt) {
 		case 'd':
-			dev_index = verbose_device_search(optarg);
-			dev_given = 1;
+			dev_index = atoi(optarg);
 			break;
 		case 'f':
-			frequency = (uint32_t)atofs(optarg);
+			frequency = (uint32_t)atof(optarg);
 			break;
 		case 'g':
 			gain = (int)(atof(optarg) * 10); /* tenths of a dB */
 			break;
 		case 's':
-			samp_rate = (uint32_t)atofs(optarg);
-			break;
-		case 'p':
-			ppm_error = atoi(optarg);
+			samp_rate = (uint32_t)atof(optarg);
 			break;
 		case 'b':
 			out_block_size = (uint32_t)atof(optarg);
@@ -173,15 +168,23 @@ int main(int argc, char **argv)
 
 	buffer = malloc(out_block_size * sizeof(uint8_t));
 
-	if (!dev_given) {
-		dev_index = verbose_device_search("0");
-	}
-
-	if (dev_index < 0) {
+	device_count = rtlsdr_get_device_count();
+	if (!device_count) {
+		fprintf(stderr, "No supported devices found.\n");
 		exit(1);
 	}
 
-	r = rtlsdr_open(&dev, (uint32_t)dev_index);
+	fprintf(stderr, "Found %d device(s):\n", device_count);
+	for (i = 0; i < device_count; i++) {
+		rtlsdr_get_device_usb_strings(i, vendor, product, serial);
+		fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
+	}
+	fprintf(stderr, "\n");
+
+	fprintf(stderr, "Using device %d: %s\n",
+		dev_index, rtlsdr_get_device_name(dev_index));
+
+	r = rtlsdr_open(&dev, dev_index);
 	if (r < 0) {
 		fprintf(stderr, "Failed to open rtlsdr device #%d.\n", dev_index);
 		exit(1);
@@ -198,21 +201,35 @@ int main(int argc, char **argv)
 	SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
 	/* Set the sample rate */
-	verbose_set_sample_rate(dev, samp_rate);
+	r = rtlsdr_set_sample_rate(dev, samp_rate);
+	if (r < 0)
+		fprintf(stderr, "WARNING: Failed to set sample rate.\n");
 
 	/* Set the frequency */
-	verbose_set_frequency(dev, frequency);
+	r = rtlsdr_set_center_freq(dev, frequency);
+	if (r < 0)
+		fprintf(stderr, "WARNING: Failed to set center freq.\n");
+	else
+		fprintf(stderr, "Tuned to %u Hz.\n", frequency);
 
 	if (0 == gain) {
 		 /* Enable automatic gain */
-		verbose_auto_gain(dev);
+		r = rtlsdr_set_tuner_gain_mode(dev, 0);
+		if (r < 0)
+			fprintf(stderr, "WARNING: Failed to enable automatic gain.\n");
 	} else {
 		/* Enable manual gain */
-		gain = nearest_gain(dev, gain);
-		verbose_gain_set(dev, gain);
-	}
+		r = rtlsdr_set_tuner_gain_mode(dev, 1);
+		if (r < 0)
+			fprintf(stderr, "WARNING: Failed to enable manual gain.\n");
 
-	verbose_ppm_set(dev, ppm_error);
+		/* Set the tuner gain */
+		r = rtlsdr_set_tuner_gain(dev, gain);
+		if (r < 0)
+			fprintf(stderr, "WARNING: Failed to set tuner gain.\n");
+		else
+			fprintf(stderr, "Tuner gain set to %f dB.\n", gain/10.0);
+	}
 
 	if(strcmp(filename, "-") == 0) { /* Write samples to stdout */
 		file = stdout;
@@ -228,7 +245,9 @@ int main(int argc, char **argv)
 	}
 
 	/* Reset endpoint before we start reading from it (mandatory) */
-	verbose_reset_buffer(dev);
+	r = rtlsdr_reset_buffer(dev);
+	if (r < 0)
+		fprintf(stderr, "WARNING: Failed to reset buffers.\n");
 
 	if (sync_mode) {
 		fprintf(stderr, "Reading samples in sync mode...\n");
@@ -260,7 +279,7 @@ int main(int argc, char **argv)
 	} else {
 		fprintf(stderr, "Reading samples in async mode...\n");
 		r = rtlsdr_read_async(dev, rtlsdr_callback, (void *)file,
-				      0, out_block_size);
+				      DEFAULT_ASYNC_BUF_NUMBER, out_block_size);
 	}
 
 	if (do_exit)

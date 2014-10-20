@@ -24,7 +24,7 @@
 #ifndef _WIN32
 #include <unistd.h>
 #else
-#include <windows.h>
+#include <Windows.h>
 #include "getopt/getopt.h"
 #endif
 
@@ -411,9 +411,7 @@ int main(int argc, char **argv)
 	if (r < 0)
 		fprintf(stderr, "Error while writing EEPROM: %i\n", r);
 	else
-		fprintf(stderr, "\nConfiguration successfully written.\n"
-				"Please replug the device for changes"
-				" to take effect.\n");
+		fprintf(stderr, "Configuration successfully written.\n");
 
 exit:
 	if (file)

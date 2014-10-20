@@ -21,10 +21,9 @@ package marto.rtl_tcp_andro;
 
 import java.util.HashSet;
 
-import marto.rtl_tcp_andro.core.RtlTcp;
-import marto.rtl_tcp_andro.core.RtlTcp.OnProcessSaidWord;
 import marto.rtl_tcp_andro.tools.BinaryRunnerService;
 import marto.rtl_tcp_andro.tools.DialogManager;
+import marto.rtl_tcp_andro.tools.ProcessRunner.OnProcessSaidWord;
 import marto.rtl_tcp_andro.tools.RtlTcpStartException;
 import marto.rtl_tcp_andro.tools.StrRes;
 import marto.rtl_tcp_andro.tools.UsbPermissionHelper;
@@ -46,6 +45,7 @@ import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentTransaction;
 import android.util.Log;
+
 import static marto.rtl_tcp_andro.StreamActivity.DISABLE_JAVA_FIX_PREF;
 import static marto.rtl_tcp_andro.StreamActivity.PREFS_NAME;
 
@@ -117,7 +117,7 @@ public class DeviceOpenActivity extends FragmentActivity implements OnProcessSai
 			finishWithError(e);
 		}
 		
-		RtlTcp.registerWordCallback(this, "listening");
+		BinaryRunnerService.registerWordCallback(this, "listening");
 		registerError("-6", err_info.replug);
 		registerError("-3", err_info.permission_denied);
 		registerError("No supported devices found", err_info.no_devices_found);
@@ -136,7 +136,7 @@ public class DeviceOpenActivity extends FragmentActivity implements OnProcessSai
 		};
 		
 		
-		RtlTcp.registerWordCallback(callback, text);
+		BinaryRunnerService.registerWordCallback(callback, text);
 		
 		registeredcallbacks.add(callback);
 	}
@@ -149,8 +149,8 @@ public class DeviceOpenActivity extends FragmentActivity implements OnProcessSai
 			unregisterReceiver(mUsbReceiver);
 		} catch (Throwable e) {};
 		
-		RtlTcp.unregisterWordCallback(this);
-		for (final OnProcessSaidWord callback : registeredcallbacks) RtlTcp.unregisterWordCallback(callback);
+		BinaryRunnerService.unregisterWordCallback(this);
+		for (final OnProcessSaidWord callback : registeredcallbacks) BinaryRunnerService.unregisterWordCallback(callback);
 		registeredcallbacks.clear();
 	}
 	

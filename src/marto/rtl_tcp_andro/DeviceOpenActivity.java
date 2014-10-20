@@ -19,6 +19,10 @@
 
 package marto.rtl_tcp_andro;
 
+import java.util.HashSet;
+
+import marto.rtl_tcp_andro.core.RtlTcp;
+import marto.rtl_tcp_andro.core.RtlTcp.OnProcessSaidWord;
 import marto.rtl_tcp_andro.tools.BinaryRunnerService;
 import marto.rtl_tcp_andro.tools.DialogManager;
 import marto.rtl_tcp_andro.tools.RtlTcpStartException;
@@ -45,13 +49,15 @@ import android.util.Log;
 import static marto.rtl_tcp_andro.StreamActivity.DISABLE_JAVA_FIX_PREF;
 import static marto.rtl_tcp_andro.StreamActivity.PREFS_NAME;
 
-public class DeviceOpenActivity extends FragmentActivity {
+public class DeviceOpenActivity extends FragmentActivity implements OnProcessSaidWord {
 	
 	private final static String TAG = "rtl_tcp_andro";
 	
 	public static Intent intent = null;
 	private static DeviceOpenActivity mostrecent_activity = null;
 	private String arguments;
+	
+	private HashSet<OnProcessSaidWord> registeredcallbacks = new HashSet<OnProcessSaidWord>();
 	
 	public static PendingIntent permissionIntent;
 	
@@ -90,14 +96,13 @@ public class DeviceOpenActivity extends FragmentActivity {
 	protected void onStart() {
 		super.onStart();
 		
-		// TODO!
-//		if (BinaryRunnerService.lastservice != null) {
-//			BinaryRunnerService.lastservice.stopSelf();
-//			try {Thread.sleep(50);} catch (Throwable e) {};
-//		}
-//		
-//		if (BinaryRunnerService.lastservice != null)
-//			finishWithError(err_info.already_running);
+		if (BinaryRunnerService.lastservice != null) {
+			BinaryRunnerService.lastservice.stopSelf();
+			try {Thread.sleep(50);} catch (Throwable e) {};
+		}
+		
+		if (BinaryRunnerService.lastservice != null)
+			finishWithError(err_info.already_running);
 		
 		try {
 			permissionIntent = PendingIntent.getBroadcast(this, 0, new Intent("com.android.example.USB_PERMISSION"), 0);
@@ -112,8 +117,29 @@ public class DeviceOpenActivity extends FragmentActivity {
 			finishWithError(e);
 		}
 		
+		RtlTcp.registerWordCallback(this, "listening");
+		registerError("-6", err_info.replug);
+		registerError("-3", err_info.permission_denied);
+		registerError("No supported devices found", err_info.no_devices_found);
 	}
 	
+	private void registerError(final String text, final err_info err) {
+		final OnProcessSaidWord callback = new OnProcessSaidWord() {
+			
+			@Override
+			public void OnProcessSaid(String line) {
+				finishWithError(err);
+			}
+			
+			@Override
+			public void OnClosed(int exitvalue) {}
+		};
+		
+		
+		RtlTcp.registerWordCallback(callback, text);
+		
+		registeredcallbacks.add(callback);
+	}
 	
 	@Override
 	protected void onStop() {
@@ -123,6 +149,9 @@ public class DeviceOpenActivity extends FragmentActivity {
 			unregisterReceiver(mUsbReceiver);
 		} catch (Throwable e) {};
 		
+		RtlTcp.unregisterWordCallback(this);
+		for (final OnProcessSaidWord callback : registeredcallbacks) RtlTcp.unregisterWordCallback(callback);
+		registeredcallbacks.clear();
 	}
 	
 	public static void showDialogStatic(final DialogManager.dialogs id, final String ... args) {
@@ -171,8 +200,7 @@ public class DeviceOpenActivity extends FragmentActivity {
 		final String address = getFilesDir().getAbsolutePath()+"/socket";
 		UsbPermissionHelper.native_startUnixSocketServer(address, connection.getFileDescriptor());
 
-		// TODO! CLOSE CONNECTION?
-		//BinaryRunnerService.usbconnection = connection;
+		BinaryRunnerService.usbconnection = connection;
 		startBinary(arguments + " -h "+address, false);	
 	}
 	
@@ -279,4 +307,15 @@ public class DeviceOpenActivity extends FragmentActivity {
 		}
 	};
 
+	@Override
+	public void OnProcessSaid(String line) {
+		android.util.Log.d("rtl_tcp_andro", "Said line! "+line);
+		finishWithSuccess();
+	}
+
+	@Override
+	public void OnClosed(int exitvalue) {
+		android.util.Log.d("rtl_tcp_andr", "Exited :(");
+		finishWithError(exitvalue);
+	}
 }

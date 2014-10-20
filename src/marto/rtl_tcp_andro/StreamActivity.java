@@ -19,7 +19,9 @@
 
 package marto.rtl_tcp_andro;
 
+import marto.rtl_tcp_andro.tools.BinaryRunnerService;
 import marto.rtl_tcp_andro.tools.DialogManager;
+import marto.rtl_tcp_andro.tools.BinaryRunnerService.OnServiceTalkCallback;
 import marto.rtl_tcp_andro.tools.DialogManager.dialogs;
 import marto.rtl_tcp_andro.tools.RtlTcpStartException.err_info;
 import android.net.Uri;
@@ -42,7 +44,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ToggleButton;
 
-public class StreamActivity extends FragmentActivity {
+public class StreamActivity extends FragmentActivity implements OnServiceTalkCallback {
 	
 	public static final String PREFS_NAME = "rtl_tcp_androPREFS";
 	public static final String DISABLE_JAVA_FIX_PREF = "disable.java.usb.fix";
@@ -94,9 +96,15 @@ public class StreamActivity extends FragmentActivity {
 			
 			@Override
 			public void onClick(View v) {
-				terminal.setText("");
-				startActivityForResult(new Intent(Intent.ACTION_VIEW).setData(Uri.parse("iqsrc://"+arguments.getText().toString())), START_REQ_CODE);
-				onoff.setChecked(true);
+				if (BinaryRunnerService.lastservice == null) {
+					terminal.setText("");
+					startActivityForResult(new Intent(Intent.ACTION_VIEW).setData(Uri.parse("iqsrc://"+arguments.getText().toString())), START_REQ_CODE);
+					onoff.setChecked(true);
+				} else {
+					BinaryRunnerService.lastservice.stopSelf();
+					onoff.setChecked(false);
+				}
+					
 			}
 		});
 		
@@ -158,6 +166,20 @@ public class StreamActivity extends FragmentActivity {
 		} catch (Throwable t) {t.printStackTrace();};
 	}
 	
+
+	
+	@Override
+	protected void onStart() {
+		super.onStart();
+		BinaryRunnerService.registerCallback(this);
+	}
+	
+	@Override
+	protected void onStop() {
+		super.onStop();
+		BinaryRunnerService.unregisterCallback(this);
+	}
+	
 	@Override
 	protected void onSaveInstanceState(Bundle outState) {
 		outState.putString("log", terminal.getText().toString());
@@ -176,9 +198,7 @@ public class StreamActivity extends FragmentActivity {
 	@Override
 	protected void onResume() {
 		super.onResume();
-		
-		//TODO!
-		//onoff.setChecked(BinaryRunnerService.lastservice != null);
+		onoff.setChecked(BinaryRunnerService.lastservice != null);
 	}
 	
 	/**
@@ -196,24 +216,23 @@ public class StreamActivity extends FragmentActivity {
 		});
 	}
 
-// TODO!
-//	@Override
-//	public void OnProcessTalk(String line) {
-//		addToLog(line);
-//	}
-//
-//	@Override
-//	public void OnClosed(int exitvalue) {
-//		addToLog("Exited with value "+exitvalue);
-//		
-//		runOnUiThread(new Runnable() {
-//
-//			@Override
-//			public void run() {
-//				onoff.setChecked(BinaryRunnerService.lastservice != null);
-//			}
-//		});
-//	}
+	@Override
+	public void OnProcessTalk(String line) {
+		addToLog(line);
+	}
+
+	@Override
+	public void OnClosed(int exitvalue) {
+		addToLog("Exited with value "+exitvalue);
+		
+		runOnUiThread(new Runnable() {
+
+			@Override
+			public void run() {
+				onoff.setChecked(BinaryRunnerService.lastservice != null);
+			}
+		});
+	}
 	
 	@Override
 	protected void onActivityResult(final int requestCode, final int resultCode, final Intent data) {
@@ -232,23 +251,21 @@ public class StreamActivity extends FragmentActivity {
 					}
 				}
 
-				// TODO!
-				// onoff.setChecked(BinaryRunnerService.lastservice != null);
+				onoff.setChecked(BinaryRunnerService.lastservice != null);
 			}
 		});
 	}
 
-// TODO!
-//	@Override
-//	public void OnWholeLogDump(final String log) {
-//		runOnUiThread(new Runnable() {
-//			
-//			@Override
-//			public void run() {
-//				terminal.setText(log);
-//				scroll.pageScroll(ScrollView.FOCUS_DOWN);
-//			}
-//		});
-//	}
+	@Override
+	public void OnWholeLogDump(final String log) {
+		runOnUiThread(new Runnable() {
+			
+			@Override
+			public void run() {
+				terminal.setText(log);
+				scroll.pageScroll(ScrollView.FOCUS_DOWN);
+			}
+		});
+	}
 
 }
